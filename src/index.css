@@ -1,0 +1,120 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Search bar */
+.search-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #4a90d9;
+}
+
+.search-button {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+.search-button:hover {
+  background: #1d4ed8;
+}
+
+/* Status messages */
+.status {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.status.error {
+  color: #c0392b;
+}
+
+/* Results list */
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.result {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 1.25rem;
+}
+
+.result:last-child {
+  border-bottom: none;
+}
+
+.result-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.result-title:hover {
+  text-decoration: underline;
+}
+
+.field {
+  margin-top: 0.75rem;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+  margin-bottom: 0.2rem;
+}
+
+.field-text {
+  margin: 0 0 0.4rem;
+  line-height: 1.5;
+}
+
+/* Highlighted words from <em> tags */
+.hl {
+  background: #cfe8ff;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
