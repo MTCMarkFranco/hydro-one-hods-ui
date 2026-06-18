@@ -59,6 +59,9 @@ const CONTENT_TYPE_OPTIONS = [
 // Dropdown options for the Prefix filter.
 const PREFIX_OPTIONS = ['AL', 'BU', 'FP', 'HO', 'PR', 'SP']
 
+// Number of records requested per page. The API accepts `top` up to 1000.
+const PAGE_SIZE = 2
+
 // Base URL for the downstream HODS API. Empty string keeps requests on the
 // same origin so the Vite dev-server proxy can forward them to the backend.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
@@ -140,6 +143,35 @@ function MultiSelectDropdown({ label, options, selected, onChange }) {
   )
 }
 
+// Minimal Previous/Next pagination control with a page indicator.
+function Pagination({ page, totalPages, onPageChange, disabled }) {
+  return (
+    <div className="pagination">
+      <button
+        type="button"
+        className="pagination-button"
+        onClick={() => onPageChange(page - 1)}
+        disabled={disabled || page <= 1}
+      >
+        Previous
+      </button>
+
+      <span className="pagination-status">
+        Page {page} of {totalPages}
+      </span>
+
+      <button
+        type="button"
+        className="pagination-button"
+        onClick={() => onPageChange(page + 1)}
+        disabled={disabled || page >= totalPages}
+      >
+        Next
+      </button>
+    </div>
+  )
+}
+
 function App() {
   const [term, setTerm] = useState('')
   const [keywords, setKeywords] = useState([])
@@ -150,6 +182,13 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [optimizing, setOptimizing] = useState(false)
   const [error, setError] = useState(null)
+  // Pagination: the committed search params, current 1-based page, and total
+  // match count from the API. Page changes refetch the matching slice.
+  const [searchParams, setSearchParams] = useState(null) // null = no search yet
+  const [page, setPage] = useState(1)
+  const [count, setCount] = useState(0)
+
+  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   // Tracks the last text returned by the optimizer so we don't re-optimize it
   // when it gets written back into the textbox.
@@ -220,35 +259,66 @@ function App() {
     return () => clearTimeout(timer)
   }, [term])
 
-  const handleSearch = async (e) => {
-    e.preventDefault()
+  // Runs the /query request for a committed set of search params and a given
+  // 1-based page. The page is passed in so it is never captured stale from a
+  // closure.
+  const runSearch = async (params, pageNum) => {
     setLoading(true)
     setError(null)
     try {
-      const filter = []
-      contentTypes.forEach((ct) => filter.push({ key: 'contentType', value: ct }))
-      if (prefix) filter.push({ key: 'prefix', value: prefix })
-
       const res = await fetch(`${API_BASE_URL}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: term,
-          keywords,
-          filter,
+          query: params.query,
+          keywords: params.keywords,
+          filter: params.filter,
+          top: PAGE_SIZE,
+          skip: (pageNum - 1) * PAGE_SIZE,
         }),
       })
       if (!res.ok) throw new Error(`Query failed (${res.status})`)
       const data = await res.json()
       setResults(data.results || [])
       setAnswers(data.answers || [])
+      setCount(data.count || 0)
     } catch (err) {
       setError(err.message)
       setResults([])
       setAnswers([])
+      setCount(0)
     } finally {
       setLoading(false)
     }
+  }
+
+  // Refetch whenever the committed search params change (new search) or the
+  // page changes. Driving both off one effect keeps the fetch logic in a
+  // single place.
+  useEffect(() => {
+    if (searchParams === null) return
+    runSearch(searchParams, page)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, page])
+
+  // A new search commits the current term/keywords/filters and resets to page
+  // 1 so a user on page 5 of an old query doesn't land on page 5 of a new,
+  // possibly shorter result set.
+  const handleSearch = (e) => {
+    e.preventDefault()
+    const filter = []
+    contentTypes.forEach((ct) => filter.push({ key: 'contentType', value: ct }))
+    if (prefix) filter.push({ key: 'prefix', value: prefix })
+
+    setPage(1)
+    setSearchParams({ query: term, keywords, filter })
+  }
+
+  // Changing the page refetches the matching slice and scrolls back to the top
+  // for long result lists.
+  const handlePageChange = (nextPage) => {
+    setPage(nextPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
@@ -330,6 +400,21 @@ function App() {
         </div>
       )}
 
+      {results !== null && !loading && count > 0 && (
+        <div className="results-meta">
+          <span className="results-range">
+            Showing {(page - 1) * PAGE_SIZE + 1}–
+            {Math.min(page * PAGE_SIZE, count)} of {count}
+          </span>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            disabled={loading}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
+
       {results !== null && !loading && (
         <ul className="results">
           {results.length === 0 && <li className="status">No results found.</li>}
@@ -383,6 +468,15 @@ function App() {
             )
           })}
         </ul>
+      )}
+
+      {results !== null && !loading && count > 0 && (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          disabled={loading}
+          onPageChange={handlePageChange}
+        />
       )}
     </main>
   )
