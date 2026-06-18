@@ -285,6 +285,65 @@ body {
   text-decoration: underline;
 }
 
+/* Top answers */
+.answers {
+  margin-bottom: 1.75rem;
+}
+
+.answer {
+  margin: 0.4rem 0 0;
+  padding: 0.6rem 0.85rem;
+  background: #f0f9ff;
+  border-left: 3px solid #2563eb;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+
+/* Result badges */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+}
+
+.badge-prefix {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+/* Document excerpt (collapsible) */
+.chunk summary {
+  cursor: pointer;
+}
+
+.chunk-text {
+  white-space: pre-wrap;
+  margin-top: 0.4rem;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+  color: #444;
+}
+
 .field {
   margin-top: 0.75rem;
 }

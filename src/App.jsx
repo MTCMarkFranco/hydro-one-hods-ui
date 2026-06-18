@@ -146,6 +146,7 @@ function App() {
   const [contentTypes, setContentTypes] = useState([])
   const [prefix, setPrefix] = useState('')
   const [results, setResults] = useState(null) // null = no search yet
+  const [answers, setAnswers] = useState([])
   const [loading, setLoading] = useState(false)
   const [optimizing, setOptimizing] = useState(false)
   const [error, setError] = useState(null)
@@ -239,10 +240,12 @@ function App() {
       })
       if (!res.ok) throw new Error(`Query failed (${res.status})`)
       const data = await res.json()
-      setResults(data.value || [])
+      setResults(data.results || [])
+      setAnswers(data.answers || [])
     } catch (err) {
       setError(err.message)
       setResults([])
+      setAnswers([])
     } finally {
       setLoading(false)
     }
@@ -316,39 +319,65 @@ function App() {
       {loading && <p className="status">Searching…</p>}
       {error && <p className="status error">{error}</p>}
 
+      {results !== null && !loading && answers.length > 0 && (
+        <div className="answers">
+          <span className="field-label">Top Answers</span>
+          {answers.map((ans, idx) => (
+            <blockquote className="answer" key={ans.key || `answer-${idx}`}>
+              {renderHighlighted(ans.highlights || ans.text || '', `answer-${idx}`)}
+            </blockquote>
+          ))}
+        </div>
+      )}
+
       {results !== null && !loading && (
         <ul className="results">
           {results.length === 0 && <li className="status">No results found.</li>}
-          {results.map((doc) => {
-            const fileName = doc.fileName || doc.sharepointPath?.split('/').pop() || 'Untitled'
-            const highlights = doc['@search.highlights']?.content || []
+          {results.map((doc, idx) => {
+            const title = doc.title || 'Untitled'
+            const contentTypeList = Array.isArray(doc.ContentType)
+              ? doc.ContentType
+              : doc.ContentType
+                ? [doc.ContentType]
+                : []
+            const captions = Array.isArray(doc.captions) ? doc.captions : []
+            const key = `${title}-${idx}`
             return (
-              <li className="result" key={doc.id}>
-                <a
-                  className="result-title"
-                  href={doc.sharepointPath}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {fileName}
-                </a>
+              <li className="result" key={key}>
+                <span className="result-title">{title}</span>
 
-                {doc.purposeScope && (
-                  <div className="field">
-                    <span className="field-label">Purpose &amp; Scope</span>
-                    <p className="field-text">{doc.purposeScope}</p>
+                {(doc.Prefix || contentTypeList.length > 0) && (
+                  <div className="badges">
+                    {doc.Prefix && (
+                      <span className="badge badge-prefix">{doc.Prefix}</span>
+                    )}
+                    {contentTypeList.map((ct) => (
+                      <span className="badge" key={ct}>
+                        {ct}
+                      </span>
+                    ))}
                   </div>
                 )}
 
-                {highlights.length > 0 && (
+                {captions.length > 0 && (
                   <div className="field">
                     <span className="field-label">Matched Result</span>
-                    {highlights.map((h, idx) => (
-                      <p className="field-text" key={`${doc.id}-hl-${idx}`}>
-                        {renderHighlighted(h, `${doc.id}-${idx}`)}
+                    {captions.map((cap, cIdx) => (
+                      <p className="field-text" key={`${key}-cap-${cIdx}`}>
+                        {renderHighlighted(
+                          cap.highlights || cap.text || '',
+                          `${key}-${cIdx}`
+                        )}
                       </p>
                     ))}
                   </div>
+                )}
+
+                {doc.chunk && (
+                  <details className="field chunk">
+                    <summary className="field-label">Document Excerpt</summary>
+                    <p className="field-text chunk-text">{doc.chunk}</p>
+                  </details>
                 )}
               </li>
             )
