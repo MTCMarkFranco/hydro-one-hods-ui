@@ -59,9 +59,6 @@ const CONTENT_TYPE_OPTIONS = [
 // Dropdown options for the Prefix filter.
 const PREFIX_OPTIONS = ['AL', 'BU', 'FP', 'HO', 'PR', 'SP']
 
-// Number of records requested per page. The API accepts `top` up to 1000.
-const PAGE_SIZE = 2
-
 // Base URL for the downstream HODS API. Empty string keeps requests on the
 // same origin so the Vite dev-server proxy can forward them to the backend.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
@@ -143,52 +140,20 @@ function MultiSelectDropdown({ label, options, selected, onChange }) {
   )
 }
 
-// Minimal Previous/Next pagination control with a page indicator.
-function Pagination({ page, totalPages, onPageChange, disabled }) {
-  return (
-    <div className="pagination">
-      <button
-        type="button"
-        className="pagination-button"
-        onClick={() => onPageChange(page - 1)}
-        disabled={disabled || page <= 1}
-      >
-        Previous
-      </button>
-
-      <span className="pagination-status">
-        Page {page} of {totalPages}
-      </span>
-
-      <button
-        type="button"
-        className="pagination-button"
-        onClick={() => onPageChange(page + 1)}
-        disabled={disabled || page >= totalPages}
-      >
-        Next
-      </button>
-    </div>
-  )
-}
-
 function App() {
   const [term, setTerm] = useState('')
   const [keywords, setKeywords] = useState([])
   const [contentTypes, setContentTypes] = useState([])
   const [prefix, setPrefix] = useState('')
   const [results, setResults] = useState(null) // null = no search yet
-  const [answers, setAnswers] = useState([])
   const [loading, setLoading] = useState(false)
   const [optimizing, setOptimizing] = useState(false)
   const [error, setError] = useState(null)
-  // Pagination: the committed search params, current 1-based page, and total
-  // match count from the API. Page changes refetch the matching slice.
+  // The committed search params and the number of documents returned by the
+  // API. The result set is document-centric (one entry per source document)
+  // and is not paginated.
   const [searchParams, setSearchParams] = useState(null) // null = no search yet
-  const [page, setPage] = useState(1)
   const [count, setCount] = useState(0)
-
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   // Tracks the last text returned by the optimizer so we don't re-optimize it
   // when it gets written back into the textbox.
@@ -259,10 +224,10 @@ function App() {
     return () => clearTimeout(timer)
   }, [term])
 
-  // Runs the /query request for a committed set of search params and a given
-  // 1-based page. The page is passed in so it is never captured stale from a
-  // closure.
-  const runSearch = async (params, pageNum) => {
+  // Runs the /query request for a committed set of search params. The API
+  // returns a deduped, document-centric result set (one entry per source
+  // document) with no pagination.
+  const runSearch = async (params) => {
     setLoading(true)
     setError(null)
     try {
@@ -273,52 +238,36 @@ function App() {
           query: params.query,
           keywords: params.keywords,
           filter: params.filter,
-          top: PAGE_SIZE,
-          skip: (pageNum - 1) * PAGE_SIZE,
         }),
       })
       if (!res.ok) throw new Error(`Query failed (${res.status})`)
       const data = await res.json()
       setResults(data.results || [])
-      setAnswers(data.answers || [])
       setCount(data.count || 0)
     } catch (err) {
       setError(err.message)
       setResults([])
-      setAnswers([])
       setCount(0)
     } finally {
       setLoading(false)
     }
   }
 
-  // Refetch whenever the committed search params change (new search) or the
-  // page changes. Driving both off one effect keeps the fetch logic in a
-  // single place.
+  // Refetch whenever the committed search params change (a new search).
   useEffect(() => {
     if (searchParams === null) return
-    runSearch(searchParams, page)
+    runSearch(searchParams)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, page])
+  }, [searchParams])
 
-  // A new search commits the current term/keywords/filters and resets to page
-  // 1 so a user on page 5 of an old query doesn't land on page 5 of a new,
-  // possibly shorter result set.
+  // A new search commits the current term/keywords/filters.
   const handleSearch = (e) => {
     e.preventDefault()
     const filter = []
     contentTypes.forEach((ct) => filter.push({ key: 'contentType', value: ct }))
     if (prefix) filter.push({ key: 'prefix', value: prefix })
 
-    setPage(1)
     setSearchParams({ query: term, keywords, filter })
-  }
-
-  // Changing the page refetches the matching slice and scrolls back to the top
-  // for long result lists.
-  const handlePageChange = (nextPage) => {
-    setPage(nextPage)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
@@ -389,29 +338,11 @@ function App() {
       {loading && <p className="status">Searching…</p>}
       {error && <p className="status error">{error}</p>}
 
-      {results !== null && !loading && answers.length > 0 && (
-        <div className="answers">
-          <span className="field-label">Top Answers</span>
-          {answers.map((ans, idx) => (
-            <blockquote className="answer" key={ans.key || `answer-${idx}`}>
-              {renderHighlighted(ans.highlights || ans.text || '', `answer-${idx}`)}
-            </blockquote>
-          ))}
-        </div>
-      )}
-
       {results !== null && !loading && count > 0 && (
         <div className="results-meta">
           <span className="results-range">
-            Showing {(page - 1) * PAGE_SIZE + 1}–
-            {Math.min(page * PAGE_SIZE, count)} of {count}
+            Showing {count} document{count === 1 ? '' : 's'}
           </span>
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            disabled={loading}
-            onPageChange={handlePageChange}
-          />
         </div>
       )}
 
@@ -419,17 +350,33 @@ function App() {
         <ul className="results">
           {results.length === 0 && <li className="status">No results found.</li>}
           {results.map((doc, idx) => {
-            const title = doc.title || 'Untitled'
+            const title = doc.DocumentName || 'Untitled'
             const contentTypeList = Array.isArray(doc.ContentType)
               ? doc.ContentType
               : doc.ContentType
                 ? [doc.ContentType]
                 : []
-            const captions = Array.isArray(doc.captions) ? doc.captions : []
+            const highlights = Array.isArray(doc.Highlights)
+              ? doc.Highlights
+              : []
+            // DocumentUrl is stubbed as "#" until the index exposes a path
+            // field; treat "#" (or missing) as "no link yet".
+            const hasLink = doc.DocumentUrl && doc.DocumentUrl !== '#'
             const key = `${title}-${idx}`
             return (
-              <li className="result" key={key}>
-                <span className="result-title">{title}</span>
+              <li className="result" key={doc.DocumentName ?? idx}>
+                {hasLink ? (
+                  <a
+                    className="result-title"
+                    href={doc.DocumentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {title}
+                  </a>
+                ) : (
+                  <span className="result-title">{title}</span>
+                )}
 
                 {(doc.Prefix || contentTypeList.length > 0) && (
                   <div className="badges">
@@ -444,39 +391,20 @@ function App() {
                   </div>
                 )}
 
-                {captions.length > 0 && (
+                {highlights.length > 0 && (
                   <div className="field">
                     <span className="field-label">Matched Result</span>
-                    {captions.map((cap, cIdx) => (
-                      <p className="field-text" key={`${key}-cap-${cIdx}`}>
-                        {renderHighlighted(
-                          cap.highlights || cap.text || '',
-                          `${key}-${cIdx}`
-                        )}
+                    {highlights.map((h, hIdx) => (
+                      <p className="field-text" key={`${key}-hl-${hIdx}`}>
+                        {renderHighlighted(h, `${key}-${hIdx}`)}
                       </p>
                     ))}
                   </div>
-                )}
-
-                {doc.chunk && (
-                  <details className="field chunk">
-                    <summary className="field-label">Document Excerpt</summary>
-                    <p className="field-text chunk-text">{doc.chunk}</p>
-                  </details>
                 )}
               </li>
             )
           })}
         </ul>
-      )}
-
-      {results !== null && !loading && count > 0 && (
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          disabled={loading}
-          onPageChange={handlePageChange}
-        />
       )}
     </main>
   )
